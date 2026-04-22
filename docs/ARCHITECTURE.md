@@ -156,7 +156,13 @@ The system uses a **local, open-source, lightweight AI pipeline**:
    density, uppercase density, TF-IDF weighted average).
 5. `ai.service.ts` — composes everything. Loads the pretrained weights at boot, runs a
    quick bootstrap fine-tune on a synthetic dataset, and for each document returns
-   statistics + a combined (TextRank + MLP) extractive summary.
+   statistics + a combined (TextRank + MLP) extractive summary. The same scoring
+   helper is reused for the cross-document phase: when a process finishes, the
+   sentences that survived each per-document summary are treated as a new
+   mini-corpus and re-ranked by TextRank + MLP to produce a genuine summary of
+   summaries (not a concatenation of heuristic snippets). Every document keeps
+   its own analysis persisted in `DocumentAnalysis`, and the global aggregate
+   is stored in `AnalysisResult`.
 
 Why this design?
 - **Truly offline** — no external services, no API keys, no vendor lock-in.
