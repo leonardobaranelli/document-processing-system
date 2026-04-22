@@ -79,11 +79,13 @@ List every process in descending creation order. Returns `ProcessResponse[]`.
 
 ### `GET /api/v1/process/results/{id}`
 
-Return aggregated results for a finished process.
+Return aggregated results for a finished process **together with the per-document
+analyses**. Every file keeps its own statistics and extractive summary; the global
+summary is an extractive re-ranking of those per-document summaries.
 
 Responses:
 
-- `200 OK` — returns `ProcessResults`.
+- `200 OK` — returns `ProcessResultsDetail`.
 - `400 Bad Request` — process has no results yet.
 - `404 Not Found` — unknown id.
 
@@ -121,6 +123,8 @@ descending chronological order.
 
 ### `ProcessResults`
 
+Aggregated-only shape (embedded inside `ProcessResponse.results`):
+
 ```json
 {
   "total_words": 1500,
@@ -128,7 +132,39 @@ descending chronological order.
   "total_characters": 9123,
   "most_frequent_words": ["the", "of", "and", "to", "a"],
   "files_processed": ["doc1.txt", "doc2.txt", "doc3.txt"],
-  "global_summary": "Extractive summary combining TextRank and MLP-scored sentences."
+  "global_summary": "Extractive summary built by re-running TextRank + MLP over the per-document summaries."
+}
+```
+
+### `ProcessResultsDetail`
+
+Returned by `GET /process/results/{id}`. Extends `ProcessResults` with the
+per-document analyses.
+
+```json
+{
+  "total_words": 1500,
+  "total_lines": 75,
+  "total_characters": 9123,
+  "most_frequent_words": ["the", "of", "and", "to", "a"],
+  "files_processed": ["doc1.txt", "doc2.txt"],
+  "global_summary": "Extractive summary built by re-running TextRank + MLP over the per-document summaries.",
+  "per_document": [
+    {
+      "filename": "doc1.txt",
+      "word_count": 715,
+      "line_count": 14,
+      "character_count": 5123,
+      "unique_words": 312,
+      "average_word_length": 5.12,
+      "top_words": ["ai", "learning", "neural"],
+      "summary": "Artificial intelligence is a broad field ...",
+      "summary_sentences": [
+        "Artificial intelligence is a broad field ...",
+        "Modern AI systems rely on two complementary approaches."
+      ]
+    }
+  ]
 }
 ```
 

@@ -34,6 +34,22 @@ export interface ProcessResults {
   global_summary: string;
 }
 
+export interface PerDocumentAnalysis {
+  filename: string;
+  word_count: number;
+  line_count: number;
+  character_count: number;
+  unique_words: number;
+  average_word_length: number;
+  top_words: string[];
+  summary: string;
+  summary_sentences: string[];
+}
+
+export interface ProcessResultsDetail extends ProcessResults {
+  per_document: PerDocumentAnalysis[];
+}
+
 export interface ProcessDto {
   process_id: string;
   status: ProcessStatus;
@@ -64,7 +80,7 @@ export async function getProcess(id: string) {
   return data.data;
 }
 export async function getResults(id: string) {
-  const { data } = await api.get<Envelope<ProcessResults>>(`/process/results/${id}`);
+  const { data } = await api.get<Envelope<ProcessResultsDetail>>(`/process/results/${id}`);
   return data.data;
 }
 export async function startProcess(body: {

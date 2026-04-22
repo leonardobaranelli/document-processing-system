@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getLogs,
   getProcess,
+  getResults,
   ProcessDto,
   pauseProcess,
   resumeProcess,
@@ -41,6 +42,13 @@ export function ProcessDetailPage() {
     queryKey: ['process-logs', id],
     queryFn: () => getLogs(id!, 50),
     enabled: Boolean(id),
+  });
+
+  const hasResults = Boolean(process?.results);
+  const { data: resultsDetail } = useQuery({
+    queryKey: ['process-results', id],
+    queryFn: () => getResults(id!),
+    enabled: Boolean(id) && hasResults,
   });
   const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
 
@@ -194,6 +202,44 @@ export function ProcessDetailPage() {
               ))}
             </ul>
           </div>
+        </section>
+      )}
+
+      {resultsDetail && resultsDetail.per_document.length > 0 && (
+        <section className="bg-white border rounded-xl p-5 shadow-sm">
+          <h2 className="font-semibold text-slate-800 mb-1">Per-document analyses</h2>
+          <p className="text-xs text-slate-500 mb-4">
+            Each file is scored and summarized independently. The global summary above is
+            an extractive re-ranking of the sentences below.
+          </p>
+          <ul className="divide-y">
+            {resultsDetail.per_document.map((d) => (
+              <li key={d.filename} className="py-4 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-mono text-slate-800 break-all">{d.filename}</h3>
+                  <div className="text-xs text-slate-500">
+                    {d.word_count.toLocaleString()} words · {d.line_count} lines ·{' '}
+                    {d.unique_words} unique · avg word {d.average_word_length.toFixed(2)}
+                  </div>
+                </div>
+                {d.top_words.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {d.top_words.slice(0, 8).map((w) => (
+                      <span
+                        key={w}
+                        className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] border border-slate-200"
+                      >
+                        {w}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-3 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {d.summary || '(empty summary)'}
+                </p>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

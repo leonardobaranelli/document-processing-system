@@ -17,9 +17,46 @@ export class ProcessResultsDto {
   @ApiProperty({ example: ['doc1.txt', 'doc2.txt', 'doc3.txt'], type: [String] })
   files_processed!: string[];
   @ApiProperty({
-    example: 'Extractive summary combining TextRank and MLP-scored sentences.',
+    example: 'Extractive summary built by re-running TextRank + MLP over the per-document summaries.',
   })
   global_summary!: string;
+}
+
+export class PerDocumentAnalysisDto {
+  @ApiProperty({ example: '01-artificial-intelligence.txt' })
+  filename!: string;
+  @ApiProperty({ example: 715 }) word_count!: number;
+  @ApiProperty({ example: 14 }) line_count!: number;
+  @ApiProperty({ example: 5123 }) character_count!: number;
+  @ApiProperty({ example: 312 }) unique_words!: number;
+  @ApiProperty({ example: 5.12 }) average_word_length!: number;
+  @ApiProperty({ example: ['ai', 'learning', 'neural'], type: [String] })
+  top_words!: string[];
+  @ApiProperty({
+    example:
+      'Artificial intelligence is a broad field of computer science dedicated to creating systems that can perform tasks that typically require human intelligence.',
+  })
+  summary!: string;
+  @ApiProperty({
+    example: [
+      'Artificial intelligence is a broad field of computer science ...',
+      'Modern AI systems are usually built around two complementary approaches.',
+    ],
+    type: [String],
+  })
+  summary_sentences!: string[];
+}
+
+/**
+ * Extended results DTO returned by GET /process/results/:id.
+ *
+ * In addition to the aggregated metrics, this includes the per-document
+ * analyses so clients can render summaries and statistics for every
+ * processed file without issuing an extra round-trip per document.
+ */
+export class ProcessResultsDetailDto extends ProcessResultsDto {
+  @ApiProperty({ type: [PerDocumentAnalysisDto] })
+  per_document!: PerDocumentAnalysisDto[];
 }
 
 export class ProcessResponseDto {
