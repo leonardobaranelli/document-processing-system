@@ -1,0 +1,120 @@
+{
+  "info": {
+    "name": "Document Processing System",
+    "description": "Asynchronous document processing API. Import into Postman or Insomnia and set the `baseUrl` variable to your backend host.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "processId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Start process",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/process/start", "host": ["{{baseUrl}}"], "path": ["process", "start"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"demo batch\",\n  \"batchSize\": 5\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.data && body.data.process_id) {",
+              "  pm.collectionVariables.set('processId', body.data.process_id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "List processes",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/process/list", "host": ["{{baseUrl}}"], "path": ["process", "list"] }
+      }
+    },
+    {
+      "name": "Get status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/process/status/{{processId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["process", "status", "{{processId}}"]
+        }
+      }
+    },
+    {
+      "name": "Get results",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/process/results/{{processId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["process", "results", "{{processId}}"]
+        }
+      }
+    },
+    {
+      "name": "Get activity logs",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/process/logs/{{processId}}?limit=100",
+          "host": ["{{baseUrl}}"],
+          "path": ["process", "logs", "{{processId}}"],
+          "query": [{ "key": "limit", "value": "100" }]
+        }
+      }
+    },
+    {
+      "name": "Pause process",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/process/pause/{{processId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["process", "pause", "{{processId}}"]
+        }
+      }
+    },
+    {
+      "name": "Resume process",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/process/resume/{{processId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["process", "resume", "{{processId}}"]
+        }
+      }
+    },
+    {
+      "name": "Stop process",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/process/stop/{{processId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["process", "stop", "{{processId}}"]
+        }
+      }
+    },
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    }
+  ]
+}

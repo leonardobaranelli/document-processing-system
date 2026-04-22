@@ -1,0 +1,137 @@
+// Prisma schema for the Document Processing System.
+// Models are kept explicit so states, relations, and audit logs
+// are queryable through a single store.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Lifecycle of a processing job.
+enum ProcessStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  STOPPED
+}
+
+/// Per-document processing status inside a job.
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+  SKIPPED
+}
+
+/// Severity levels for the activity log.
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+model Process {
+  id                  String        @id @default(uuid()) @db.Uuid
+  name                String?
+  status              ProcessStatus @default(PENDING)
+  inputDirectory      String
+  batchSize           Int           @default(5)
+  totalFiles          Int           @default(0)
+  processedFiles      Int           @default(0)
+  failedFiles         Int           @default(0)
+  progressPercentage  Int           @default(0)
+  errorMessage        String?
+  startedAt           DateTime?
+  pausedAt            DateTime?
+  resumedAt           DateTime?
+  stoppedAt           DateTime?
+  completedAt         DateTime?
+  estimatedCompletion DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  documents Document[]
+  result    AnalysisResult?
+  logs      ActivityLog[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Document {
+  id           String         @id @default(uuid()) @db.Uuid
+  processId    String         @db.Uuid
+  filename     String
+  filepath     String
+  sizeBytes    Int            @default(0)
+  status       DocumentStatus @default(PENDING)
+  errorMessage String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  process         Process                  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  analysis        DocumentAnalysis?
+
+  @@index([processId])
+  @@index([status])
+}
+
+/// Per-document analysis output (statistics + summary).
+model DocumentAnalysis {
+  id                String   @id @default(uuid()) @db.Uuid
+  documentId        String   @unique @db.Uuid
+  wordCount         Int      @default(0)
+  lineCount         Int      @default(0)
+  characterCount    Int      @default(0)
+  uniqueWords       Int      @default(0)
+  averageWordLength Float    @default(0)
+  topWords          Json     /// [{ word: string, count: number }]
+  summary           String   @db.Text
+  summarySentences  Json     /// string[]
+  mlpImportance     Json     /// number[]   (MLP-scored sentence importances, same order as sentences)
+  createdAt         DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+/// Aggregated result at the process level (matches the spec's API response).
+model AnalysisResult {
+  id                String   @id @default(uuid()) @db.Uuid
+  processId         String   @unique @db.Uuid
+  totalWords        Int      @default(0)
+  totalLines        Int      @default(0)
+  totalCharacters   Int      @default(0)
+  mostFrequentWords Json     /// [{ word: string, count: number }]
+  filesProcessed    Json     /// string[]
+  globalSummary     String   @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  process Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+}
+
+/// Append-only activity log per process.
+model ActivityLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  processId String?  @db.Uuid
+  level     LogLevel @default(INFO)
+  event     String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  process Process? @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([processId, createdAt])
+  @@index([level])
+}
