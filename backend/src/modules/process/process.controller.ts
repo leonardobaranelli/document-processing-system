@@ -21,7 +21,7 @@ import { ProcessService } from './process.service';
 import { StartProcessDto } from './dto/start-process.dto';
 import {
   ProcessResponseDto,
-  ProcessResultsDto,
+  ProcessResultsDetailDto,
 } from './dto/process-response.dto';
 
 @ApiTags('process')
@@ -81,10 +81,13 @@ export class ProcessController {
   }
 
   @Get('results/:id')
-  @ApiOperation({ summary: 'Get aggregated analysis results for a process.' })
+  @ApiOperation({
+    summary:
+      'Get aggregated analysis results for a process, including per-document summaries and statistics.',
+  })
   @ApiParam({ name: 'id', description: 'Process UUID' })
-  @ApiResponse({ status: 200, type: ProcessResultsDto })
-  results(@Param('id', new ParseUUIDPipe()) id: string): Promise<ProcessResultsDto> {
+  @ApiResponse({ status: 200, type: ProcessResultsDetailDto })
+  results(@Param('id', new ParseUUIDPipe()) id: string): Promise<ProcessResultsDetailDto> {
     return this.svc.getResults(id);
   }
 

@@ -121,6 +121,29 @@ Manual modifications applied after generation: see section 4.
 
 ---
 
+### Session 2 — Per-document summaries + global summary-of-summaries
+
+Original prompt (Spanish, as written by the author):
+
+> Excelente trabajo compañero!! Estuve revisando todo a detalle y quiero felicitarte por seguir tan meticulosamente las instrucciones, sigamos así arquitecto de software. Traté de proporcionarte las instruciones lo más detalladas posible para hacer un boilerplate lo más acertado y completo posible. Y luego de revisar todo definitivamente esta fase quedó completada con éxito ahora es fundamental respetar la arquitectura, patrones y todo lo que diseñamos para mantener la consistencia y el objetivo del desarrollo (porfavor ten siempre esto presente porque cuando revise voy a notar si nos estamos saliendo del diseño y vamos a perder tiempo, asi que siempre mira 2 veces antes de ejecutar).
+>
+> Ahora debes encargarte de lo siguiente:
+> El análisis de los documentos actualemente está haciendo un resumen global de la convergencia de todos los archivos que se procesan en conjunto, en su lugar el módulo de ia debe encargarse de hacer un resumen individual de cada archivo (cada archivo por mas que se procese en conjunto con otros debe tener su tratamiento individual, y en consucuencia su data relativa a eso almacenada también), y el resumen global debe ser un resumen de todos los resumenes individuales.
+
+**AI-generated output in this session:**
+- `backend/src/modules/ai/ai.service.ts` — refactored `aggregate()` so the global summary re-runs TextRank + MLP over the union of per-document summary sentences; extracted `summarizeCorpus()` helper shared by single-document and cross-document scoring.
+- `backend/src/modules/ai/ai.service.spec.ts` — added tests that prove the global summary is an extractive selection from the per-document summary pool and that it degrades gracefully when there are no summary sentences.
+- `backend/src/modules/process/dto/process-response.dto.ts` — introduced `PerDocumentAnalysisDto` and `ProcessResultsDetailDto` (extends `ProcessResultsDto`).
+- `backend/src/modules/process/process.controller.ts` — `GET /process/results/:id` now returns `ProcessResultsDetailDto`.
+- `backend/src/modules/process/process.service.ts` — `getResults()` joins `DocumentAnalysis` and maps each document into `per_document[]`.
+- `frontend/src/lib/api.ts` — new `PerDocumentAnalysis` / `ProcessResultsDetail` types; `getResults()` retyped.
+- `frontend/src/pages/ProcessDetailPage.tsx` — dedicated query for `/results/:id` and a new "Per-document analyses" section with stats, top words and per-file summaries.
+- `docs/API_DOCS.md`, `docs/ARCHITECTURE.md` — documented the `ProcessResultsDetail` shape and the summary-of-summaries design.
+
+Manual modifications applied after generation: see section 4.
+
+---
+
 ### How to add a future entry
 
 When you ask the assistant to add or change code, append a new block here with:

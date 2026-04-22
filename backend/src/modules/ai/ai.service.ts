@@ -43,6 +43,14 @@ export interface AggregateAnalysisInput {
  *   5) Run the MLP on hand-crafted features to get a learned importance score.
  *   6) Combine both scores and pick the top-N sentences, ordered as in the
  *      original document, to form an extractive summary.
+ *
+ * Aggregation across documents (summary of summaries):
+ *   The global summary is not a concatenation of per-document snippets.
+ *   Instead, the sentences that survived each per-document selection
+ *   are treated as a new mini-corpus, and the same TextRank + MLP
+ *   scoring is applied to that corpus. The result is an extractive
+ *   summary that competes across documents on equal terms while keeping
+ *   the cost linear in the total number of summary sentences.
  */
 @Injectable()
 export class AiService implements OnModuleInit {
@@ -117,21 +125,12 @@ export class AiService implements OnModuleInit {
         : 0;
 
     const sentences = splitSentences(text);
-    const { scores: rankScores } = textRank(sentences);
-    const featureRows = this.extractor.extract(
+    const topWordsLower = topWordsList.map((w) => w.word);
+    const { selected: summarySentences, mlpScores } = this.summarizeCorpus(
       sentences,
-      topWordsList.map((w) => w.word),
+      topWordsLower,
+      Math.min(summaryK, sentences.length),
     );
-
-    const mlpScores = featureRows.map((row) => this.mlp.predict(row.features)[0]);
-
-    // Combine the two signals (TextRank + MLP). Normalize each to [0, 1]
-    // then average. This prevents one signal from dominating due to scale.
-    const rankNorm = normalize(rankScores);
-    const mlpNorm = normalize(mlpScores);
-    const combined = rankNorm.map((v, i) => 0.5 * v + 0.5 * mlpNorm[i]);
-
-    const summarySentences = pickTopInOrder(sentences, combined, Math.min(summaryK, sentences.length));
     const summary = summarySentences.join(' ');
 
     return {
@@ -148,33 +147,53 @@ export class AiService implements OnModuleInit {
   }
 
   /**
-   * Build an aggregate summary from multiple per-document analyses.
-   * Merges word counts, re-ranks top words globally, and returns a
-   * compact cross-document summary.
+   * Build an aggregate result from multiple per-document analyses.
+   *
+   * Totals and top words are straightforward reductions. The global
+   * summary is built by running the same TextRank + MLP scoring over
+   * the union of sentences that each per-document summary already
+   * selected. That way every document competes on equal footing and
+   * the final summary is a genuine extractive summary of the summaries,
+   * not a concatenation of heuristic snippets.
    */
   aggregate(
     perDocument: Array<{ filename: string; analysis: DocumentAnalysis }>,
+    opts: { globalSummarySentences?: number } = {},
   ): AggregateAnalysisInput {
+    const globalK = opts.globalSummarySentences ?? 5;
+
     const freq = new Map<string, number>();
     let totalWords = 0;
     let totalLines = 0;
     let totalCharacters = 0;
     const filesProcessed: string[] = [];
-    const summaryPieces: string[] = [];
+    const allSummarySentences: string[] = [];
 
     for (const { filename, analysis } of perDocument) {
       totalWords += analysis.wordCount;
       totalLines += analysis.lineCount;
       totalCharacters += analysis.characterCount;
       filesProcessed.push(filename);
-      if (analysis.summarySentences.length > 0) summaryPieces.push(analysis.summarySentences[0]);
+      for (const s of analysis.summarySentences) {
+        if (s && s.trim().length > 0) allSummarySentences.push(s.trim());
+      }
       for (const { word, count } of analysis.topWords) {
         freq.set(word, (freq.get(word) ?? 0) + count);
       }
     }
 
     const mostFrequentWords = topN(freq, 10);
-    const globalSummary = summaryPieces.slice(0, 5).join(' ');
+
+    let globalSummary = '';
+    if (allSummarySentences.length > 0) {
+      const k = Math.min(globalK, allSummarySentences.length);
+      const { selected } = this.summarizeCorpus(
+        allSummarySentences,
+        mostFrequentWords.map((w) => w.word),
+        k,
+      );
+      globalSummary = selected.join(' ');
+    }
 
     return {
       totalWords,
@@ -184,6 +203,33 @@ export class AiService implements OnModuleInit {
       filesProcessed,
       globalSummary,
     };
+  }
+
+  /**
+   * Core scoring helper shared by per-document and cross-document summaries.
+   * Given a list of sentences and a pivot of salient words, compute
+   * TextRank + MLP importances, combine them 50/50 on normalized scales,
+   * and return the top-K sentences preserving their original order.
+   */
+  private summarizeCorpus(
+    sentences: string[],
+    pivotWords: string[],
+    k: number,
+  ): { selected: string[]; mlpScores: number[] } {
+    if (sentences.length === 0 || k <= 0) {
+      return { selected: [], mlpScores: [] };
+    }
+
+    const { scores: rankScores } = textRank(sentences);
+    const featureRows = this.extractor.extract(sentences, pivotWords);
+    const mlpScores = featureRows.map((row) => this.mlp.predict(row.features)[0]);
+
+    const rankNorm = normalize(rankScores);
+    const mlpNorm = normalize(mlpScores);
+    const combined = rankNorm.map((v, i) => 0.5 * v + 0.5 * mlpNorm[i]);
+
+    const selected = pickTopInOrder(sentences, combined, Math.min(k, sentences.length));
+    return { selected, mlpScores };
   }
 }
 

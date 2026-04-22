@@ -14,7 +14,9 @@ import { DocumentsService } from '../documents/documents.service';
 import { EventsGateway } from '../events/events.gateway';
 import { StartProcessDto } from './dto/start-process.dto';
 import {
+  PerDocumentAnalysisDto,
   ProcessResponseDto,
+  ProcessResultsDetailDto,
   ProcessResultsDto,
 } from './dto/process-response.dto';
 import { PROCESS_JOBS, PROCESS_QUEUE, RunBatchJobData } from './constants';
@@ -176,10 +178,16 @@ export class ProcessService {
     return rows.map((r) => this.toResponse(r, r.result));
   }
 
-  async getResults(id: string): Promise<ProcessResultsDto> {
+  async getResults(id: string): Promise<ProcessResultsDetailDto> {
     const p = await this.prisma.process.findUnique({
       where: { id },
-      include: { result: true },
+      include: {
+        result: true,
+        documents: {
+          include: { analysis: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
     if (!p) throw new NotFoundException(`Process ${id} not found.`);
     if (!p.result) {
@@ -187,7 +195,31 @@ export class ProcessService {
         `Process ${id} has no results yet (current status: ${p.status}).`,
       );
     }
-    return this.toResultsDto(p.result);
+
+    const perDocument: PerDocumentAnalysisDto[] = p.documents
+      .filter((d) => d.analysis)
+      .map((d) => {
+        const a = d.analysis!;
+        const topWords = (a.topWords as Array<{ word: string; count: number }>).map(
+          (w) => w.word,
+        );
+        return {
+          filename: d.filename,
+          word_count: a.wordCount,
+          line_count: a.lineCount,
+          character_count: a.characterCount,
+          unique_words: a.uniqueWords,
+          average_word_length: a.averageWordLength,
+          top_words: topWords,
+          summary: a.summary,
+          summary_sentences: a.summarySentences as string[],
+        };
+      });
+
+    return {
+      ...this.toResultsDto(p.result),
+      per_document: perDocument,
+    };
   }
 
   async getActivityLog(id: string, limit = 100) {
