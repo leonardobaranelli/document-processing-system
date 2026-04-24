@@ -71,6 +71,7 @@ export function ProcessDetailPage() {
     const onUpdate = (p: ProcessDto) => {
       if (p.process_id !== id) return;
       qc.setQueryData(['process', id], p);
+      setActionError(null);
     };
 
     socket.on('process:log', onLog);
