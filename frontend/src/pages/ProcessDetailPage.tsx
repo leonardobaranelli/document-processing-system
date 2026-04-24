@@ -32,6 +32,10 @@ export function ProcessDetailPage() {
     queryKey: ['process', id],
     queryFn: () => getProcess(id!),
     enabled: Boolean(id),
+    placeholderData: () => {
+      const list = qc.getQueryData<ProcessDto[]>(['processes']);
+      return list?.find((p) => p.process_id === id);
+    },
     refetchInterval: (q) => {
       const p = q.state.data as ProcessDto | undefined;
       return p && ['RUNNING', 'PENDING', 'PAUSED'].includes(p.status) ? 2000 : false;
@@ -51,6 +55,7 @@ export function ProcessDetailPage() {
     enabled: Boolean(id) && hasResults,
   });
   const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (fetchedLogs) setLiveLogs(fetchedLogs.slice(0, 50));
@@ -66,6 +71,7 @@ export function ProcessDetailPage() {
     const onUpdate = (p: ProcessDto) => {
       if (p.process_id !== id) return;
       qc.setQueryData(['process', id], p);
+      setActionError(null);
     };
 
     socket.on('process:log', onLog);
@@ -86,14 +92,37 @@ export function ProcessDetailPage() {
     };
   }, [id, qc]);
 
-  const stop = useMutation({ mutationFn: () => stopProcess(id!) });
-  const pause = useMutation({ mutationFn: () => pauseProcess(id!) });
-  const resume = useMutation({ mutationFn: () => resumeProcess(id!) });
+  const onMutationSuccess = (p: ProcessDto) => {
+    qc.setQueryData(['process', id], p);
+    qc.invalidateQueries({ queryKey: ['processes'] });
+  };
+  const onMutationError = (err: unknown) => {
+    const msg =
+      (err as { message?: string })?.message ?? 'Action failed. Please try again.';
+    setActionError(msg);
+  };
+
+  const stop = useMutation({
+    mutationFn: () => stopProcess(id!),
+    onSuccess: onMutationSuccess,
+    onError: onMutationError,
+  });
+  const pause = useMutation({
+    mutationFn: () => pauseProcess(id!),
+    onSuccess: onMutationSuccess,
+    onError: onMutationError,
+  });
+  const resume = useMutation({
+    mutationFn: () => resumeProcess(id!),
+    onSuccess: onMutationSuccess,
+    onError: onMutationError,
+  });
 
   if (!id) return null;
   if (!process) return <p className="text-slate-500">Loading process…</p>;
 
   const isActive = ['PENDING', 'RUNNING', 'PAUSED'].includes(process.status);
+  const actionPending = pause.isPending || resume.isPending || stop.isPending;
 
   return (
     <div className="space-y-6">
@@ -135,29 +164,46 @@ export function ProcessDetailPage() {
         </div>
 
         {isActive && (
-          <div className="mt-5 flex gap-2">
-            {process.status === 'RUNNING' && (
+          <div className="mt-5 space-y-2">
+            <div className="flex gap-2">
+              {process.status === 'RUNNING' && (
+                <button
+                  onClick={() => {
+                    setActionError(null);
+                    pause.mutate();
+                  }}
+                  disabled={actionPending}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm transition"
+                >
+                  {pause.isPending ? 'Pausing…' : 'Pause'}
+                </button>
+              )}
+              {process.status === 'PAUSED' && (
+                <button
+                  onClick={() => {
+                    setActionError(null);
+                    resume.mutate();
+                  }}
+                  disabled={actionPending}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm transition"
+                >
+                  {resume.isPending ? 'Resuming…' : 'Resume'}
+                </button>
+              )}
               <button
-                onClick={() => pause.mutate()}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm"
+                onClick={() => {
+                  setActionError(null);
+                  stop.mutate();
+                }}
+                disabled={actionPending}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm transition"
               >
-                Pause
+                {stop.isPending ? 'Stopping…' : 'Stop'}
               </button>
+            </div>
+            {actionError && (
+              <p className="text-sm text-rose-600">{actionError}</p>
             )}
-            {process.status === 'PAUSED' && (
-              <button
-                onClick={() => resume.mutate()}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-              >
-                Resume
-              </button>
-            )}
-            <button
-              onClick={() => stop.mutate()}
-              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm"
-            >
-              Stop
-            </button>
           </div>
         )}
       </section>

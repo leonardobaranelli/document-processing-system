@@ -27,6 +27,7 @@ export function DashboardPage() {
         copy[idx] = p;
         return copy;
       });
+      qc.setQueryData(['process', p.process_id], p);
     };
     socket.on('process:created', upsert);
     socket.on('process:status', upsert);
