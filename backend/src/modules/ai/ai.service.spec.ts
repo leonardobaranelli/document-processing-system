@@ -8,12 +8,12 @@ describe('AiService', () => {
     await svc.onModuleInit();
   });
 
-  it('produces basic statistics for a sample document', () => {
+  it('produces basic statistics for a sample document', async () => {
     const text =
       'The quick brown fox jumps over the lazy dog.\n' +
       'Foxes are clever animals that live in many regions.\n' +
       'This system analyzes documents and extracts statistics.';
-    const a = svc.analyzeDocument(text, { topWords: 5, summarySentences: 2 });
+    const a = await svc.analyzeDocument(text, { topWords: 5, summarySentences: 2 });
 
     expect(a.wordCount).toBeGreaterThan(10);
     expect(a.lineCount).toBe(3);
@@ -23,16 +23,18 @@ describe('AiService', () => {
     expect(a.summary.length).toBeGreaterThan(0);
   });
 
-  it('returns zero counts for empty input without crashing', () => {
-    const a = svc.analyzeDocument('', { topWords: 3, summarySentences: 2 });
+  it('returns zero counts for empty input without crashing', async () => {
+    const a = await svc.analyzeDocument('', { topWords: 3, summarySentences: 2 });
     expect(a.wordCount).toBe(0);
     expect(a.lineCount).toBe(0);
     expect(a.summary).toBe('');
   });
 
-  it('aggregates multiple document analyses', () => {
-    const doc = svc.analyzeDocument('Alpha beta gamma. Gamma delta epsilon. Alpha gamma zeta.');
-    const agg = svc.aggregate([
+  it('aggregates multiple document analyses', async () => {
+    const doc = await svc.analyzeDocument(
+      'Alpha beta gamma. Gamma delta epsilon. Alpha gamma zeta.',
+    );
+    const agg = await svc.aggregate([
       { filename: 'a.txt', analysis: doc },
       { filename: 'b.txt', analysis: doc },
     ]);
@@ -41,27 +43,27 @@ describe('AiService', () => {
     expect(agg.mostFrequentWords.length).toBeGreaterThan(0);
   });
 
-  it('global summary is an extractive summary of the per-document summaries', () => {
-    const a = svc.analyzeDocument(
+  it('global summary is an extractive summary of the per-document summaries', async () => {
+    const a = await svc.analyzeDocument(
       'Neural networks learn representations from data. ' +
         'Gradient descent adjusts weights to minimize a loss function. ' +
         'Regularization helps prevent overfitting in deep models.',
       { summarySentences: 2 },
     );
-    const b = svc.analyzeDocument(
+    const b = await svc.analyzeDocument(
       'Databases store information in structured tables. ' +
         'Indexes speed up query execution at the cost of extra writes. ' +
         'Transactions ensure atomic and durable updates across sessions.',
       { summarySentences: 2 },
     );
-    const c = svc.analyzeDocument(
+    const c = await svc.analyzeDocument(
       'Distributed systems rely on message passing between nodes. ' +
         'Consensus algorithms coordinate replicated state under partial failures. ' +
         'Latency and throughput trade-offs drive architectural decisions.',
       { summarySentences: 2 },
     );
 
-    const agg = svc.aggregate(
+    const agg = await svc.aggregate(
       [
         { filename: 'a.txt', analysis: a },
         { filename: 'b.txt', analysis: b },
@@ -93,9 +95,9 @@ describe('AiService', () => {
     }
   });
 
-  it('global summary is empty when no documents have summary sentences', () => {
-    const empty = svc.analyzeDocument('', { summarySentences: 2 });
-    const agg = svc.aggregate([{ filename: 'empty.txt', analysis: empty }]);
+  it('global summary is empty when no documents have summary sentences', async () => {
+    const empty = await svc.analyzeDocument('', { summarySentences: 2 });
+    const agg = await svc.aggregate([{ filename: 'empty.txt', analysis: empty }]);
     expect(agg.globalSummary).toBe('');
     expect(agg.filesProcessed).toEqual(['empty.txt']);
   });
