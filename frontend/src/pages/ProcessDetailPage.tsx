@@ -46,6 +46,10 @@ export function ProcessDetailPage() {
     queryKey: ['process-logs', id],
     queryFn: () => getLogs(id!, 50),
     enabled: Boolean(id),
+    refetchInterval:
+      process && ['RUNNING', 'PENDING', 'PAUSED'].includes(process.status)
+        ? 2000
+        : false,
   });
 
   const hasResults = Boolean(process?.results);
@@ -58,7 +62,18 @@ export function ProcessDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (fetchedLogs) setLiveLogs(fetchedLogs.slice(0, 50));
+    if (!fetchedLogs) return;
+    setLiveLogs((prev) => {
+      const byId = new Map<string, LogEntry>(prev.map((e) => [e.id, e]));
+      for (const entry of fetchedLogs) {
+        if (!byId.has(entry.id)) byId.set(entry.id, entry);
+      }
+      return Array.from(byId.values())
+        .sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .slice(0, 200);
+    });
   }, [fetchedLogs]);
 
   useEffect(() => {
@@ -71,6 +86,7 @@ export function ProcessDetailPage() {
     const onUpdate = (p: ProcessDto) => {
       if (p.process_id !== id) return;
       qc.setQueryData(['process', id], p);
+      qc.invalidateQueries({ queryKey: ['process-logs', id] });
       setActionError(null);
     };
 
