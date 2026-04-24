@@ -10,6 +10,11 @@ import { meaningfulTokens } from './tokenizer';
  * This is O(N^2) in sentence count, which is fine for the expected document
  * sizes (<= a few thousand sentences). It is 100% offline, deterministic,
  * and uses zero external dependencies.
+ *
+ * The loops below periodically yield control back to the Node.js event loop
+ * via `setImmediate` so that for large documents the HTTP server and the
+ * WebSocket gateway can keep answering requests / flushing events while the
+ * analysis is in progress.
  */
 export interface TextRankOptions {
   /** Damping factor for PageRank (typically 0.85). */
@@ -25,7 +30,17 @@ export interface TextRankResult {
   scores: number[];
 }
 
-export function textRank(sentences: string[], opts: TextRankOptions = {}): TextRankResult {
+/** Number of matrix rows processed between event-loop yields. */
+const YIELD_EVERY_ROWS = 32;
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+export async function textRank(
+  sentences: string[],
+  opts: TextRankOptions = {},
+): Promise<TextRankResult> {
   const damping = opts.damping ?? 0.85;
   const maxIter = opts.maxIterations ?? 60;
   const tol = opts.tolerance ?? 1e-4;
@@ -34,10 +49,8 @@ export function textRank(sentences: string[], opts: TextRankOptions = {}): TextR
   if (n === 0) return { scores: [] };
   if (n === 1) return { scores: [1] };
 
-  // Precompute token sets to avoid O(n^3) re-tokenization.
   const tokenSets = sentences.map((s) => new Set(meaningfulTokens(s)));
 
-  // Build weighted adjacency matrix W and out-degree D.
   const W: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
   const degree: number[] = new Array(n).fill(0);
 
@@ -51,6 +64,7 @@ export function textRank(sentences: string[], opts: TextRankOptions = {}): TextR
         degree[j] += sim;
       }
     }
+    if ((i + 1) % YIELD_EVERY_ROWS === 0) await yieldEventLoop();
   }
 
   let scores: number[] = new Array(n).fill(1 / n);
@@ -62,10 +76,12 @@ export function textRank(sentences: string[], opts: TextRankOptions = {}): TextR
           next[i] += damping * (W[j][i] / degree[j]) * scores[j];
         }
       }
+      if ((i + 1) % YIELD_EVERY_ROWS === 0) await yieldEventLoop();
     }
     const delta = l1(next, scores);
     scores = next;
     if (delta < tol) break;
+    await yieldEventLoop();
   }
 
   return { scores };
