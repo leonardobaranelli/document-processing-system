@@ -16,7 +16,7 @@ export class StartProcessDto {
     description:
       'Absolute or relative path to the input directory (.txt files). ' +
       'Defaults to the configured DOCUMENTS_INPUT_DIR.',
-    example: '/app/sample-data',
+    example: process.env.DOCUMENTS_INPUT_DIR ?? '../sample-data',
   })
   @IsOptional()
   @IsString()

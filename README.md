@@ -173,9 +173,28 @@ A deeper write-up lives in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The h
 
 ---
 
-## 7. Testing
+## 7. Full technical walkthroughs (deployed)
 
-### 7.1 Unit tests (fast, no infrastructure required)
+A complete, chapter-by-chapter technical walkthrough of the application is available
+online at:
+
+**https://document-processing-system-walkthro.vercel.app/**
+
+It is a set of 12 standalone pages that explain
+the system end to end — from the health probe to the from-scratch MLP and TextRank
+summarizer — including architecture, database schema, infrastructure, bootstrap,
+support modules, AI pipeline, process state machine, real-time events, frontend,
+testing strategy, and a final trace of an end-to-end process with all the invariants
+the system upholds.
+
+Use it as the companion reference while reading the code: every page maps one-to-one
+to a module or concern in this repository.
+
+---
+
+## 8. Testing
+
+### 8.1 Unit tests (fast, no infrastructure required)
 
 ```bash
 cd backend
@@ -189,7 +208,7 @@ Coverage includes:
 - `ai.service.spec.ts` — smoke-tests the AI pipeline end to end.
 - `tokenizer.spec.ts` — edge cases in tokenization, sentence splitting, top-N selection.
 
-### 7.2 E2E tests (require Postgres + Redis)
+### 8.2 E2E tests (require Postgres + Redis)
 
 ```bash
 # make sure Postgres + Redis are up (docker compose up -d postgres redis)
@@ -197,14 +216,14 @@ cd backend
 npm run test:e2e
 ```
 
-### 7.3 Manual integration
+### 8.3 Manual integration
 
 Import `docs/postman-collection.json` into Postman or Insomnia, set the `baseUrl` variable,
 and drive the full lifecycle: start → pause → resume → stop → results.
 
 ---
 
-## 8. Environment variables
+## 9. Environment variables
 
 See `.env.example`. The most important ones:
 
@@ -220,6 +239,6 @@ See `.env.example`. The most important ones:
 
 ---
 
-## 9. License
+## 10. License
 
 MIT.
