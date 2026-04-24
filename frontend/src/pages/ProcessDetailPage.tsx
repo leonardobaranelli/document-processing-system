@@ -32,6 +32,10 @@ export function ProcessDetailPage() {
     queryKey: ['process', id],
     queryFn: () => getProcess(id!),
     enabled: Boolean(id),
+    placeholderData: () => {
+      const list = qc.getQueryData<ProcessDto[]>(['processes']);
+      return list?.find((p) => p.process_id === id);
+    },
     refetchInterval: (q) => {
       const p = q.state.data as ProcessDto | undefined;
       return p && ['RUNNING', 'PENDING', 'PAUSED'].includes(p.status) ? 2000 : false;
