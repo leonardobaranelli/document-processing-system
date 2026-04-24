@@ -183,6 +183,7 @@ export class ProcessWorker extends WorkerHost {
         `Document "${doc.filename}" failed: ${message}`,
         { documentId: doc.id },
       );
+      await this.recomputeProgress(doc.processId);
       return;
     }
 
@@ -218,6 +219,12 @@ export class ProcessWorker extends WorkerHost {
       `Document "${doc.filename}" processed (${analysis.wordCount} words, ${analysis.lineCount} lines).`,
       { documentId: doc.id },
     );
+
+    // Emit an incremental progress update per document so the UI moves in
+    // small steps instead of jumping from one batch boundary to the next.
+    // When a single document (e.g. a large textbook) dominates a batch, this
+    // is what lets the bar advance smoothly as the smaller files complete.
+    await this.recomputeProgress(doc.processId);
   }
 
   private async recomputeProgress(processId: string): Promise<void> {
@@ -238,10 +245,16 @@ export class ProcessWorker extends WorkerHost {
       estimated = new Date(Date.now() + remainingMs);
     }
 
-    await this.prisma.process.update({
-      where: { id: processId },
+    // Only advance the progress snapshot while the process is RUNNING. If the
+    // user paused or stopped the process, in-flight documents may still finish
+    // and bump `processedFiles`, but we want the displayed bar to freeze at
+    // the value it had when the user intervened.
+    const updated = await this.prisma.process.updateMany({
+      where: { id: processId, status: ProcessStatus.RUNNING },
       data: { progressPercentage: pct, estimatedCompletion: estimated ?? undefined },
     });
+    if (updated.count === 0) return;
+
     const hydrated = await this.processService.getProcess(processId);
     this.gateway.emitToProcess(processId, 'process:progress', hydrated);
   }
@@ -280,37 +293,47 @@ export class ProcessWorker extends WorkerHost {
     const allFailed = totals.totalFiles > 0 && totals.failedFiles === totals.totalFiles;
     const finalStatus = allFailed ? ProcessStatus.FAILED : ProcessStatus.COMPLETED;
 
-    await this.prisma.$transaction([
-      this.prisma.analysisResult.upsert({
-        where: { processId },
-        create: {
-          processId,
-          totalWords: aggregate.totalWords,
-          totalLines: aggregate.totalLines,
-          totalCharacters: aggregate.totalCharacters,
-          mostFrequentWords: aggregate.mostFrequentWords as unknown as Prisma.InputJsonValue,
-          filesProcessed: aggregate.filesProcessed as unknown as Prisma.InputJsonValue,
-          globalSummary: aggregate.globalSummary,
-        },
-        update: {
-          totalWords: aggregate.totalWords,
-          totalLines: aggregate.totalLines,
-          totalCharacters: aggregate.totalCharacters,
-          mostFrequentWords: aggregate.mostFrequentWords as unknown as Prisma.InputJsonValue,
-          filesProcessed: aggregate.filesProcessed as unknown as Prisma.InputJsonValue,
-          globalSummary: aggregate.globalSummary,
-        },
-      }),
-      this.prisma.process.update({
-        where: { id: processId },
-        data: {
-          status: finalStatus,
-          progressPercentage: 100,
-          completedAt: new Date(),
-          errorMessage: allFailed ? 'All documents failed to process.' : null,
-        },
-      }),
-    ]);
+    // Optimistic-lock the final transition. The aggregation above yields the
+    // event loop many times, which opens a window for the user to pause or
+    // stop the process. If that happened the row is no longer RUNNING and we
+    // must NOT overwrite their intent with COMPLETED. On resume the worker
+    // will re-enter finalize and try again cleanly.
+    const claim = await this.prisma.process.updateMany({
+      where: { id: processId, status: ProcessStatus.RUNNING },
+      data: {
+        status: finalStatus,
+        progressPercentage: 100,
+        completedAt: new Date(),
+        errorMessage: allFailed ? 'All documents failed to process.' : null,
+      },
+    });
+    if (claim.count === 0) {
+      this.logger.log(
+        `Finalize aborted for ${processId}: status changed during aggregation.`,
+      );
+      return;
+    }
+
+    await this.prisma.analysisResult.upsert({
+      where: { processId },
+      create: {
+        processId,
+        totalWords: aggregate.totalWords,
+        totalLines: aggregate.totalLines,
+        totalCharacters: aggregate.totalCharacters,
+        mostFrequentWords: aggregate.mostFrequentWords as unknown as Prisma.InputJsonValue,
+        filesProcessed: aggregate.filesProcessed as unknown as Prisma.InputJsonValue,
+        globalSummary: aggregate.globalSummary,
+      },
+      update: {
+        totalWords: aggregate.totalWords,
+        totalLines: aggregate.totalLines,
+        totalCharacters: aggregate.totalCharacters,
+        mostFrequentWords: aggregate.mostFrequentWords as unknown as Prisma.InputJsonValue,
+        filesProcessed: aggregate.filesProcessed as unknown as Prisma.InputJsonValue,
+        globalSummary: aggregate.globalSummary,
+      },
+    });
 
     await this.processService.logEvent(
       processId,
