@@ -1,5 +1,9 @@
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import request from 'supertest';
 
 import { AppModule } from '../src/app.module';
@@ -14,8 +18,10 @@ import { TransformInterceptor } from '../src/common/interceptors/transform.inter
  */
 describe('Process Control API (e2e)', () => {
   let app: INestApplication;
+  let emptyInputDir: string;
 
   beforeAll(async () => {
+    emptyInputDir = await mkdtemp(join(tmpdir(), 'document-processing-e2e-'));
     const modRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = modRef.createNestApplication();
     app.setGlobalPrefix('api');
@@ -35,6 +41,9 @@ describe('Process Control API (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
+    if (emptyInputDir) {
+      await rm(emptyInputDir, { recursive: true, force: true });
+    }
   });
 
   it('GET /api/v1/process/list -> 200 (envelope)', async () => {
@@ -44,18 +53,13 @@ describe('Process Control API (e2e)', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  it('POST /api/v1/process/start -> 201 (if sample-data exists)', async () => {
+  it('POST /api/v1/process/start -> 400 when input directory has no text files', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/process/start')
-      .send({ name: 'e2e-test' });
-    // When sample-data is absent in the test runner, the controller returns 400.
-    expect([201, 400]).toContain(res.status);
-    if (res.status === 201) {
-      expect(res.body).toMatchObject({ success: true, statusCode: 201 });
-      expect(res.body.data).toHaveProperty('process_id');
-      expect(res.body.data).toHaveProperty('status');
-      expect(res.body.data).toHaveProperty('progress');
-    }
+      .send({ name: 'e2e-test', inputDirectory: emptyInputDir })
+      .expect(400);
+
+    expect(res.body).toMatchObject({ success: false, statusCode: 400 });
   });
 
   it('GET /api/v1/process/status/:id -> 404 for unknown uuid', async () => {
