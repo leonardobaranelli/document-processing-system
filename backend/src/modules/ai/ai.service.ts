@@ -107,7 +107,10 @@ export class AiService implements OnModuleInit {
   }
 
   /** Analyze a single document and return stats + summary. */
-  analyzeDocument(text: string, opts: { topWords?: number; summarySentences?: number } = {}): DocumentAnalysis {
+  async analyzeDocument(
+    text: string,
+    opts: { topWords?: number; summarySentences?: number } = {},
+  ): Promise<DocumentAnalysis> {
     const topK = opts.topWords ?? 10;
     const summaryK = opts.summarySentences ?? 3;
 
@@ -126,7 +129,7 @@ export class AiService implements OnModuleInit {
 
     const sentences = splitSentences(text);
     const topWordsLower = topWordsList.map((w) => w.word);
-    const { selected: summarySentences, mlpScores } = this.summarizeCorpus(
+    const { selected: summarySentences, mlpScores } = await this.summarizeCorpus(
       sentences,
       topWordsLower,
       Math.min(summaryK, sentences.length),
@@ -156,10 +159,10 @@ export class AiService implements OnModuleInit {
    * the final summary is a genuine extractive summary of the summaries,
    * not a concatenation of heuristic snippets.
    */
-  aggregate(
+  async aggregate(
     perDocument: Array<{ filename: string; analysis: DocumentAnalysis }>,
     opts: { globalSummarySentences?: number } = {},
-  ): AggregateAnalysisInput {
+  ): Promise<AggregateAnalysisInput> {
     const globalK = opts.globalSummarySentences ?? 5;
 
     const freq = new Map<string, number>();
@@ -187,7 +190,7 @@ export class AiService implements OnModuleInit {
     let globalSummary = '';
     if (allSummarySentences.length > 0) {
       const k = Math.min(globalK, allSummarySentences.length);
-      const { selected } = this.summarizeCorpus(
+      const { selected } = await this.summarizeCorpus(
         allSummarySentences,
         mostFrequentWords.map((w) => w.word),
         k,
@@ -211,16 +214,16 @@ export class AiService implements OnModuleInit {
    * TextRank + MLP importances, combine them 50/50 on normalized scales,
    * and return the top-K sentences preserving their original order.
    */
-  private summarizeCorpus(
+  private async summarizeCorpus(
     sentences: string[],
     pivotWords: string[],
     k: number,
-  ): { selected: string[]; mlpScores: number[] } {
+  ): Promise<{ selected: string[]; mlpScores: number[] }> {
     if (sentences.length === 0 || k <= 0) {
       return { selected: [], mlpScores: [] };
     }
 
-    const { scores: rankScores } = textRank(sentences);
+    const { scores: rankScores } = await textRank(sentences);
     const featureRows = this.extractor.extract(sentences, pivotWords);
     const mlpScores = featureRows.map((row) => this.mlp.predict(row.features)[0]);
 

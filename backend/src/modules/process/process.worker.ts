@@ -161,7 +161,7 @@ export class ProcessWorker extends WorkerHost {
     let analysis: DocumentAnalysis;
     try {
       const text = await this.docs.readText(doc.filepath);
-      analysis = this.ai.analyzeDocument(text);
+      analysis = await this.ai.analyzeDocument(text);
     } catch (err) {
       const message = (err as Error).message ?? 'unknown failure';
       await this.prisma.document.update({
@@ -275,7 +275,7 @@ export class ProcessWorker extends WorkerHost {
         },
       }));
 
-    const aggregate = this.ai.aggregate(perDoc);
+    const aggregate = await this.ai.aggregate(perDoc);
     const noDocsProcessed = processed.length === 0;
     const allFailed = totals.totalFiles > 0 && totals.failedFiles === totals.totalFiles;
     const finalStatus = allFailed ? ProcessStatus.FAILED : ProcessStatus.COMPLETED;
